@@ -1,6 +1,6 @@
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_URL || "https://api-sistema-gestion-becas.onrender.com"
 ).replace(/\/+$/, "");
 
 export async function apiFetch(endpoint, options = {}) {
@@ -16,6 +16,7 @@ export async function apiFetch(endpoint, options = {}) {
     !headers.has("Content-Type")
   ) {
     headers.set("Content-Type", "application/json");
+    console.log("URL REAL DE LA PETICIÓN:", `${API_URL}${path}`);
   }
 
   const response = await fetch(`${API_URL}${path}`, {
