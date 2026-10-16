@@ -1,6 +1,6 @@
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "https://api-sistema-gestion-becas.onrender.com"
+  import.meta.env.VITE_API_URL || "https://api-sistema-gestion-becas-1.onrender.com"
 ).replace(/\/+$/, "");
 
 export async function apiFetch(endpoint, options = {}) {
