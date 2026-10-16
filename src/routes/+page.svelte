@@ -1,5 +1,5 @@
 <script> 
-    import Inicio from "./Login/+page.svelte"
+    import Inicio from "./login/+page.svelte"
 </script>
 
 <Inicio></Inicio>
