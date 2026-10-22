@@ -11,6 +11,7 @@ import VolverArriba from "$lib/components/Volver_arriba.svelte";
 import Whatsapp from "$lib/components/Whatsapp.svelte";
 import { apiFetch } from "$lib/api.js";
 
+
 let estudiantes = $state([]);
 let programas = $state([]);
 let cargando = $state(false);
@@ -30,13 +31,10 @@ let idPrograma = $state("");
 
 let usuario = $state(null);
 let esAdministrador = $state(false);
+let buscandoDocumento = $state(false);
 
 const columnasEstudiantes = [
-    {
-        key: "id_estudiante",
-        label: "ID",
-        sortable: true
-    },
+    { key: "id_estudiante", label: "ID", sortable: true },
     {
         key: "nombre_completo",
         label: "Nombre completo",
@@ -44,22 +42,14 @@ const columnasEstudiantes = [
             `${fila.nombres ?? ""} ${fila.apellidos ?? ""}`.trim(),
         sortable: true
     },
-    {
-        key: "documento",
-        label: "Documento",
-        sortable: true
-    },
+    { key: "documento", label: "Documento", sortable: true },
     {
         key: "programa",
         label: "Programa académico",
         value: (fila) => nombrePrograma(fila.id_programa),
         sortable: true
     },
-    {
-        key: "fecha_ingreso",
-        label: "Fecha de ingreso",
-        sortable: true
-    },
+    { key: "fecha_ingreso", label: "Fecha de ingreso", sortable: true },
     {
         key: "estado",
         label: "Estado",
@@ -84,53 +74,68 @@ const accionesEstudiantes = [
     }
 ];
 
-onMount(() => {
-    const usuarioGuardado = sessionStorage.getItem("usuario");
-    const rolGuardado = sessionStorage.getItem("id_rol");
-
+onMount(async () => {
     try {
-        usuario = usuarioGuardado
-            ? JSON.parse(usuarioGuardado)
-            : null;
+        const usuarioGuardado = sessionStorage.getItem("usuario");
+        const rolGuardado = sessionStorage.getItem("id_rol");
 
+        usuario = usuarioGuardado ? JSON.parse(usuarioGuardado) : null;
         esAdministrador =
             Number(rolGuardado ?? usuario?.id_rol) === 2;
 
-        cargarDatos();
+        // Cargar programas para que el formulario esté disponible.
+        await cargarProgramas();
+
+        if (esAdministrador) {
+            await cargarEstudiantes();
+        } else if (usuario?.cedula || usuario?.documento) {
+            // Para el estudiante, buscar sus propios datos.
+            documento = String(usuario.cedula ?? usuario.documento);
+            await buscarEstudiantePorDocumento();
+        } else {
+            mostrarMensaje(
+                "No se encontró el documento del usuario. Verifica los datos de la sesión.",
+                "warning"
+            );
+        }
     } catch (error) {
-        console.error("Error al inicializar la página de estudiantes:", error);
+        console.error("Error al inicializar estudiantes:", error);
         mostrarMensaje(
             "No fue posible cargar la información del usuario.",
             "danger"
         );
     }
 });
-async function cargarDatos() {
+
+async function cargarProgramas() {
+    const respuesta = await apiFetch("/programas/");
+    programas = Array.isArray(respuesta) ? respuesta : [];
+}
+
+async function cargarEstudiantes() {
     cargando = true;
-    mensaje = "";
 
     try {
-        const [respuestaEstudiantes, respuestaProgramas] =
-            await Promise.all([
-                apiFetch("/estudiantes/"),
-                apiFetch("/programas/")
-            ]);
-
-        estudiantes = Array.isArray(respuestaEstudiantes)
-            ? respuestaEstudiantes
-            : [];
-
-        programas = Array.isArray(respuestaProgramas)
-            ? respuestaProgramas
-            : [];
+        const respuesta = await apiFetch("/estudiantes/");
+        estudiantes = Array.isArray(respuesta) ? respuesta : [];
     } catch (error) {
         console.error("Error al cargar estudiantes:", error);
         mostrarMensaje(
-            "No fue posible cargar los estudiantes o los programas. Verifica la conexión con la API.",
+            "No fue posible cargar los estudiantes. Verifica la conexión con la API.",
             "danger"
         );
     } finally {
         cargando = false;
+    }
+}
+
+async function cargarDatos() {
+    await cargarProgramas();
+
+    if (esAdministrador) {
+        await cargarEstudiantes();
+    } else {
+        await buscarEstudiantePorDocumento();
     }
 }
 
@@ -152,7 +157,6 @@ function mostrarMensaje(texto, tipo = "success") {
 function limpiar() {
     nombres = "";
     apellidos = "";
-    documento = "";
     fechaIngreso = "";
     correo = "";
     telefono = "";
@@ -160,6 +164,55 @@ function limpiar() {
     idEstudiante = null;
     editando = false;
     mensaje = "";
+
+    // No borrar el documento del usuario que está diligenciando
+    // su propio registro.
+    if (esAdministrador) {
+        documento = "";
+    } else {
+        documento = String(usuario?.cedula ?? usuario?.documento ?? "");
+    }
+}
+
+async function buscarEstudiantePorDocumento() {
+    if (!documento.trim()) return;
+
+    buscandoDocumento = true;
+    mensaje = "";
+
+    try {
+        // Se consulta el listado para encontrar el documento.
+        // Este endpoint debe permitir la consulta al usuario que corresponda.
+        const respuesta = await apiFetch("/estudiantes/");
+        const lista = Array.isArray(respuesta) ? respuesta : [];
+
+        const encontrado = lista.find(
+            (e) => String(e.documento).trim() === documento.trim()
+        );
+
+        if (encontrado) {
+            editarEstudiante(encontrado);
+            mostrarMensaje(
+                "Encontramos tu registro. Puedes revisar y actualizar tus datos.",
+                "success"
+            );
+        } else {
+            idEstudiante = null;
+            editando = false;
+            mostrarMensaje(
+                "No existe un registro con este documento. Completa tus datos para registrarte.",
+                "info"
+            );
+        }
+    } catch (error) {
+        console.error("Error al buscar estudiante:", error);
+        mostrarMensaje(
+            "No fue posible consultar el registro. Verifica la API.",
+            "danger"
+        );
+    } finally {
+        buscandoDocumento = false;
+    }
 }
 
 async function guardarEstudiante(event) {
@@ -194,34 +247,55 @@ async function guardarEstudiante(event) {
     guardando = true;
 
     try {
-        if (editando) {
+        if (editando && idEstudiante !== null) {
             await apiFetch(`/estudiantes/${idEstudiante}`, {
                 method: "PUT",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(datos)
             });
 
             mostrarMensaje("Estudiante actualizado correctamente.");
         } else {
-            await apiFetch("/estudiantes/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(datos)
-            });
+            // Comprobar si el documento ya existe antes de insertar.
+            const respuesta = await apiFetch("/estudiantes/");
+            const lista = Array.isArray(respuesta) ? respuesta : [];
 
-            mostrarMensaje("Estudiante registrado correctamente.");
+            const existente = lista.find(
+                (e) => String(e.documento).trim() === documento.trim()
+            );
+
+            if (existente) {
+                // Si existe, actualizarlo en vez de intentar un POST.
+                await apiFetch(`/estudiantes/${existente.id_estudiante}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(datos)
+                });
+
+                mostrarMensaje("Los datos del estudiante fueron actualizados.");
+            } else {
+                await apiFetch("/estudiantes/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(datos)
+                });
+
+                mostrarMensaje("Estudiante registrado correctamente.");
+            }
         }
 
-        limpiar();
         await cargarDatos();
+
+        if (esAdministrador) {
+            limpiar();
+        } else {
+            // Mantener los datos actualizados visibles para el estudiante.
+            await buscarEstudiantePorDocumento();
+        }
     } catch (error) {
         console.error("Error al guardar estudiante:", error);
         mostrarMensaje(
-            "No fue posible guardar el estudiante. Verifica los datos y la API.",
+            "No fue posible guardar los datos. Revisa los registros y la API.",
             "danger"
         );
     } finally {
@@ -233,7 +307,7 @@ function editarEstudiante(estudiante) {
     idEstudiante = estudiante.id_estudiante;
     nombres = estudiante.nombres ?? "";
     apellidos = estudiante.apellidos ?? "";
-    documento = estudiante.documento ?? "";
+    documento = String(estudiante.documento ?? "");
     fechaIngreso = estudiante.fecha_ingreso
         ? String(estudiante.fecha_ingreso).slice(0, 10)
         : "";
@@ -241,15 +315,15 @@ function editarEstudiante(estudiante) {
     telefono = estudiante.telefono ?? "";
     idPrograma = String(estudiante.id_programa ?? "");
     editando = true;
-    mensaje = "";
 
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
+    if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
 }
 
 async function eliminarEstudiante(estudiante) {
+    if (!esAdministrador) return;
+
     const confirmado = confirm(
         `¿Deseas eliminar al estudiante ${estudiante.nombres} ${estudiante.apellidos}?`
     );
@@ -262,7 +336,7 @@ async function eliminarEstudiante(estudiante) {
         });
 
         mostrarMensaje("Estudiante eliminado correctamente.");
-        await cargarDatos();
+        await cargarEstudiantes();
     } catch (error) {
         console.error("Error al eliminar estudiante:", error);
         mostrarMensaje(
