@@ -29,6 +29,7 @@
             </div>
         {/if}
 
+        <!-- FORMULARIO DE REGISTRO Y EDICIÓN -->
         <div class="card shadow-sm mb-5">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">
@@ -177,18 +178,20 @@
             </div>
         </div>
 
-        <DataTable
-            data={estudiantes}
-            columns={columnasEstudiantes}
-            actions={accionesEstudiantes}
-            title="Estudiantes registrados"
-            loading={cargando}
-            emptyMessage="No hay estudiantes registrados."
-            pageSize={10}
-            showSearch={true}
-        />
+        <!-- TABLA VISIBLE SOLAMENTE PARA EL ADMINISTRADOR -->
+        {#if esAdministrador}
+            <DataTable
+                data={estudiantes}
+                columns={columnasEstudiantes}
+                actions={accionesEstudiantes}
+                title="Estudiantes registrados"
+                loading={cargando}
+                emptyMessage="No hay estudiantes registrados."
+                pageSize={10}
+                showSearch={true}
+            />
+        {/if}
     </div>
 
     <Footer />
 </Navbar>
-

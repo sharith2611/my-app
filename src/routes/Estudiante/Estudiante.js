@@ -28,6 +28,9 @@ let correo = $state("");
 let telefono = $state("");
 let idPrograma = $state("");
 
+let usuario = $state(null);
+let esAdministrador = $state(false);
+
 const columnasEstudiantes = [
     {
         key: "id_estudiante",
@@ -82,9 +85,26 @@ const accionesEstudiantes = [
 ];
 
 onMount(() => {
-    cargarDatos();
-});
+    const usuarioGuardado = sessionStorage.getItem("usuario");
+    const rolGuardado = sessionStorage.getItem("id_rol");
 
+    try {
+        usuario = usuarioGuardado
+            ? JSON.parse(usuarioGuardado)
+            : null;
+
+        esAdministrador =
+            Number(rolGuardado ?? usuario?.id_rol) === 2;
+
+        cargarDatos();
+    } catch (error) {
+        console.error("Error al inicializar la página de estudiantes:", error);
+        mostrarMensaje(
+            "No fue posible cargar la información del usuario.",
+            "danger"
+        );
+    }
+});
 async function cargarDatos() {
     cargando = true;
     mensaje = "";

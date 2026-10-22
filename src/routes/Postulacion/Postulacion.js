@@ -29,6 +29,10 @@ let guardando = $state(false);
 let mensaje = $state("");
 let tipoMensaje = $state("danger");
 let errorPostulaciones = $state("");
+let esAdministrador = $derived(
+    Number(sessionStorage.getItem("id_rol") ?? usuario?.id_rol) === 2
+);
+
 
 function obtenerFechaActual() {
     const ahora = new Date();
@@ -107,31 +111,38 @@ const columnasPostulaciones = [
 ];
 
 async function cargarPostulaciones() {
-    if (!estudiante?.id_estudiante) return;
+    if (!esAdministrador && !estudiante?.id_estudiante) return;
 
     cargandoPostulaciones = true;
     errorPostulaciones = "";
 
     try {
         const respuesta = await apiFetch("/postulaciones/");
-        postulaciones = normalizarLista(respuesta).filter(
-            (postulacion) =>
-                String(postulacion.id_estudiante) ===
-                String(estudiante.id_estudiante)
-        );
+        const lista = normalizarLista(respuesta);
+
+        postulaciones = esAdministrador
+            ? lista
+            : lista.filter(
+                (postulacion) =>
+                    String(postulacion.id_estudiante) ===
+                    String(estudiante.id_estudiante)
+            );
     } catch (error) {
-        console.error("Error al cargar el historial de postulaciones:", error);
-        errorPostulaciones =
-            "No fue posible cargar tu historial de postulaciones. Intenta nuevamente.";
+        console.error("Error al cargar postulaciones:", error);
+        errorPostulaciones = esAdministrador
+            ? "No fue posible cargar todas las postulaciones."
+            : "No fue posible cargar tu historial de postulaciones.";
     } finally {
         cargandoPostulaciones = false;
     }
 }
 
+
 onMount(async () => {
     fechaPostulacion = obtenerFechaActual();
 
     const usuarioGuardado = sessionStorage.getItem("usuario");
+    const rol = sessionStorage.getItem("id_rol");
 
     if (!usuarioGuardado) {
         await goto("/Login");
@@ -141,14 +152,31 @@ onMount(async () => {
     try {
         usuario = JSON.parse(usuarioGuardado);
 
-        if (!usuario?.cedula) {
+        if (!usuario) {
+            await goto("/Login");
+            return;
+        }
+
+        // ADMINISTRADOR (rol 2): cargar todas las postulaciones
+        // sin consultar la tabla estudiantes.
+        if (Number(rol ?? usuario.id_rol) === 2) {
+            estudiante = null;
+            validandoEstudiante = false;
+
+            await cargarPostulaciones();
+            return;
+        }
+
+        // LOS DEMÁS ROLES: validar contra la tabla estudiantes.
+        if (!usuario.cedula) {
+            estudiante = null;
             mostrarMensaje(
-                "No se encontró la cédula del usuario. Cierra sesión e inicia sesión nuevamente."
+                "No se encontró la cédula del usuario.",
+                "warning"
             );
             return;
         }
 
-        // Buscar el estudiante asociado a la cédula del usuario.
         estudiante = await apiFetch(
             `/estudiantes/documento/${encodeURIComponent(usuario.cedula)}`
         );
@@ -162,34 +190,26 @@ onMount(async () => {
             return;
         }
 
+        // Cargar historial y convocatorias para el estudiante.
         await cargarPostulaciones();
+        await cargarConvocatorias();
 
-        // Consultar las convocatorias.
-        cargandoConvocatorias = true;
-
-        const respuesta = await apiFetch("/convocatorias/");
-
-        convocatorias = Array.isArray(respuesta) ? respuesta : [];
-
-        if (convocatorias.length === 0) {
-            mostrarMensaje(
-                "No hay convocatorias disponibles para seleccionar.",
-                "warning"
-            );
-        }
     } catch (error) {
-        console.error("Error al validar los datos:", error);
+        console.error("Error al inicializar postulaciones:", error);
 
         estudiante = null;
 
         mostrarMensaje(
-            "No fue posible validar tus datos o consultar las convocatorias. Intenta nuevamente."
+            "No fue posible cargar la información. Intenta nuevamente.",
+            "danger"
         );
+
     } finally {
         validandoEstudiante = false;
-        cargandoConvocatorias = false;
     }
 });
+
+
 
 async function registrarPostulacion(event) {
     event.preventDefault();
