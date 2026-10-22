@@ -1,3 +1,4 @@
+
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { apiFetch } from "$lib/api.js";
@@ -29,9 +30,7 @@ let guardando = $state(false);
 let mensaje = $state("");
 let tipoMensaje = $state("danger");
 let errorPostulaciones = $state("");
-let esAdministrador = $derived(
-    Number(sessionStorage.getItem("id_rol") ?? usuario?.id_rol) === 2
-);
+let esAdministrador = $state(false);
 
 
 function obtenerFechaActual() {
@@ -43,19 +42,35 @@ function obtenerFechaActual() {
     return `${anio}-${mes}-${dia}`;
 }
 
+
 function mostrarMensaje(texto, tipo = "danger") {
     mensaje = texto;
     tipoMensaje = tipo;
 }
+
 
 function obtenerNombreConvocatoria(convocatoria) {
     return (
         convocatoria.nombre_convocatoria ??
         convocatoria.nombre ??
         convocatoria.descripcion ??
-        `Convocatoria ${convocatoria.id_convocatoria}`
+        `Convocatoria ${convocatoria.id_convocatoria ?? ""}`.trim()
     );
 }
+
+
+function obtenerNombreEstudiante(fila) {
+    const nombreCompleto = [
+        fila.nombres,
+        fila.apellidos
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+    return nombreCompleto || `Estudiante ${fila.id_estudiante ?? ""}`.trim();
+}
+
 
 function normalizarLista(respuesta) {
     if (Array.isArray(respuesta)) {
@@ -66,8 +81,11 @@ function normalizarLista(respuesta) {
         return respuesta.items;
     }
 
-    throw new Error("El servidor no devolvió una lista válida de postulaciones.");
+    throw new Error(
+        "El servidor no devolvió una lista válida."
+    );
 }
+
 
 function formatearFecha(fecha) {
     if (!fecha) return "—";
@@ -80,10 +98,18 @@ function formatearFecha(fecha) {
     return `${partes[2]}/${partes[1]}/${partes[0]}`;
 }
 
+
+// Columnas compartidas por la vista del administrador
+// y el historial personal del estudiante.
 const columnasPostulaciones = [
     {
         key: "id_postulacion",
         label: "N.º"
+    },
+    {
+        key: "estudiante",
+        label: "Estudiante",
+        value: (fila) => obtenerNombreEstudiante(fila)
     },
     {
         key: "convocatoria",
@@ -101,17 +127,51 @@ const columnasPostulaciones = [
     },
     {
         key: "escala",
-        label: "Estado"
+        label: "Estado",
+        value: (fila) => fila.escala ?? "Pendiente"
     },
     {
         key: "observaciones",
         label: "Observaciones",
-        sortable: false
+        sortable: false,
+        value: (fila) => fila.observaciones ?? "—"
     }
 ];
 
+
+async function cargarConvocatorias() {
+    cargandoConvocatorias = true;
+
+    try {
+        const respuesta = await apiFetch("/convocatorias/");
+        const lista = normalizarLista(respuesta);
+
+        convocatorias = lista.filter((convocatoria) => {
+            const estado = convocatoria.estado;
+
+            return estado === true ||
+                estado === 1 ||
+                estado === "true" ||
+                estado === "Activo";
+        });
+    } catch (error) {
+        console.error("Error al cargar convocatorias:", error);
+        convocatorias = [];
+
+        mostrarMensaje(
+            "No fue posible cargar las convocatorias disponibles.",
+            "danger"
+        );
+    } finally {
+        cargandoConvocatorias = false;
+    }
+}
+
+
 async function cargarPostulaciones() {
-    if (!esAdministrador && !estudiante?.id_estudiante) return;
+    if (!esAdministrador && !estudiante?.id_estudiante) {
+        return;
+    }
 
     cargandoPostulaciones = true;
     errorPostulaciones = "";
@@ -129,6 +189,7 @@ async function cargarPostulaciones() {
             );
     } catch (error) {
         console.error("Error al cargar postulaciones:", error);
+
         errorPostulaciones = esAdministrador
             ? "No fue posible cargar todas las postulaciones."
             : "No fue posible cargar tu historial de postulaciones.";
@@ -157,9 +218,10 @@ onMount(async () => {
             return;
         }
 
-        // ADMINISTRADOR (rol 2): cargar todas las postulaciones
-        // sin consultar la tabla estudiantes.
-        if (Number(rol ?? usuario.id_rol) === 2) {
+        esAdministrador =
+            Number(rol ?? usuario.id_rol) === 2;
+
+        if (esAdministrador) {
             estudiante = null;
             validandoEstudiante = false;
 
@@ -167,13 +229,14 @@ onMount(async () => {
             return;
         }
 
-        // LOS DEMÁS ROLES: validar contra la tabla estudiantes.
         if (!usuario.cedula) {
             estudiante = null;
+
             mostrarMensaje(
                 "No se encontró la cédula del usuario.",
                 "warning"
             );
+
             return;
         }
 
@@ -183,19 +246,23 @@ onMount(async () => {
 
         if (!estudiante?.id_estudiante) {
             estudiante = null;
+
             mostrarMensaje(
                 "Debes actualizar tus datos de estudiante antes de postularte.",
                 "warning"
             );
+
             return;
         }
 
-        // Cargar historial y convocatorias para el estudiante.
         await cargarPostulaciones();
         await cargarConvocatorias();
 
     } catch (error) {
-        console.error("Error al inicializar postulaciones:", error);
+        console.error(
+            "Error al inicializar postulaciones:",
+            error
+        );
 
         estudiante = null;
 
@@ -208,7 +275,6 @@ onMount(async () => {
         validandoEstudiante = false;
     }
 });
-
 
 
 async function registrarPostulacion(event) {
@@ -228,7 +294,9 @@ async function registrarPostulacion(event) {
     }
 
     if (!fechaPostulacion) {
-        mostrarMensaje("No se pudo establecer la fecha de postulación.");
+        mostrarMensaje(
+            "No se pudo establecer la fecha de postulación."
+        );
         return;
     }
 
@@ -239,7 +307,9 @@ async function registrarPostulacion(event) {
     );
 
     if (!convocatoriaSeleccionada) {
-        mostrarMensaje("La convocatoria seleccionada no es válida.");
+        mostrarMensaje(
+            "La convocatoria seleccionada no es válida."
+        );
         return;
     }
 
@@ -254,7 +324,6 @@ async function registrarPostulacion(event) {
             adjuntos: null
         };
 
-        // El backend asigna estado y escala inicial.
         await apiFetch("/postulaciones/", {
             method: "POST",
             headers: {
@@ -273,13 +342,18 @@ async function registrarPostulacion(event) {
         idConvocatoria = "";
         fechaPostulacion = obtenerFechaActual();
         observaciones = "";
+
     } catch (error) {
-        console.error("Error al registrar la postulación:", error);
+        console.error(
+            "Error al registrar la postulación:",
+            error
+        );
 
         mostrarMensaje(
             error?.message ??
             "No fue posible registrar la postulación. Intenta nuevamente."
         );
+
     } finally {
         guardando = false;
     }
