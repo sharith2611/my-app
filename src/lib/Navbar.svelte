@@ -1,89 +1,32 @@
-
 <script>
     import { onMount } from "svelte";
     import { apiFetch } from "$lib/api.js";
+    import Logo from "$lib/components/logo.svelte";
 
     let usuario = $state(null);
     let menu = $state([]);
     let cargandoMenu = $state(true);
     let errorMenu = $state("");
 
-    // Relación entre los nombres de los módulos y las rutas existentes.
     const rutasModulos = {
-        "inicio": {
-            nombre: "Inicio",
-            ruta: "/Inicio"
-        },
-        "usuarios": {
-            nombre: "Usuarios",
-            ruta: "/Usuarios"
-        },
-        "roles": {
-            nombre: "Roles",
-            ruta: "/Roles"
-        },
-        "modulos": {
-            nombre: "Módulos",
-            ruta: "/Modulos"
-        },
-        "permisos del menu": {
-            nombre: "Permisos del menú",
-            ruta: "/Modulo_rol"
-        },
-        "estudiantes": {
-            nombre: "Actualizar Datos",
-            ruta: "/Estudiante"
-        },
-        "convocatorias": {
-            nombre: "Convocatorias",
-            ruta: "/Convocatoria"
-        },
-        "convocatoria": {
-            nombre: "Convocatoria",
-            ruta: "/Convocatoria"
-        },
-        "postulaciones": {
-            nombre: "Postulaciones",
-            ruta: "/Postulacion"
-        },
-        "postulacion": {
-            nombre: "Postulación",
-            ruta: "/Postulacion"
-        },
-        "adjudicaciones": {
-            nombre: "Adjudicaciones",
-            ruta: "/Adjudicacion"
-        },
-        "adjudicacion": {
-            nombre: "Adjudicación",
-            ruta: "/Adjudicacion"
-        },
-       
-        "programa academico": {
-            nombre: "Programa Académico",
-            ruta: "/Programa_academico"
-        },
-        "institucion": {
-            nombre: "Institución",
-            ruta: "/Institucion"
-        },
-        "facultad": {
-            nombre: "Facultad",
-            ruta: "/Facultad"
-        },
-        "actualizar datos": {
-            nombre: "Actualizar Datos",
-            ruta: "/Estudiante"
-        },
-        "estudiante": {
-            nombre: "Actualizar Datos",
-            ruta: "/Estudiante"
-        },
-       
-        "auxilio educativo": {
-            nombre: "Auxilio Educativo",
-            ruta: "/Auxilio_educativo"
-        }
+        inicio: { nombre: "Inicio", ruta: "/Inicio" },
+        usuarios: { nombre: "Usuarios", ruta: "/Usuarios" },
+        roles: { nombre: "Roles", ruta: "/Roles" },
+        modulos: { nombre: "Módulos", ruta: "/Modulos" },
+        "permisos del menu": { nombre: "Permisos del menú", ruta: "/Modulo_rol" },
+        estudiantes: { nombre: "Actualizar Datos", ruta: "/Estudiante" },
+        convocatorias: { nombre: "Convocatorias", ruta: "/Convocatoria" },
+        convocatoria: { nombre: "Convocatoria", ruta: "/Convocatoria" },
+        postulaciones: { nombre: "Postulaciones", ruta: "/Postulacion" },
+        postulacion: { nombre: "Postulación", ruta: "/Postulacion" },
+        adjudicaciones: { nombre: "Adjudicaciones", ruta: "/Adjudicacion" },
+        adjudicacion: { nombre: "Adjudicación", ruta: "/Adjudicacion" },
+        "programa academico": { nombre: "Programa Académico", ruta: "/Programa_academico" },
+        institucion: { nombre: "Institución", ruta: "/Institucion" },
+        facultad: { nombre: "Facultad", ruta: "/Facultad" },
+        "actualizar datos": { nombre: "Actualizar Datos", ruta: "/Estudiante" },
+        estudiante: { nombre: "Actualizar Datos", ruta: "/Estudiante" },
+        "auxilio educativo": { nombre: "Auxilio Educativo", ruta: "/Auxilio_educativo" }
     };
 
     function normalizarNombre(nombre) {
@@ -101,85 +44,44 @@
 
         try {
             const datosUsuario = sessionStorage.getItem("usuario");
-
             if (!datosUsuario) {
                 errorMenu = "No hay una sesión de usuario activa.";
                 return;
             }
 
             usuario = JSON.parse(datosUsuario);
-
             if (usuario?.id_rol == null) {
                 errorMenu = "No se encontró el rol del usuario.";
                 return;
             }
 
-            // Consultar los módulos activos asignados al rol del usuario.
-            const respuesta = await apiFetch(
-                `/modulo-rol/${usuario.id_rol}`
-            );
-
+            const respuesta = await apiFetch(`/modulo-rol/${usuario.id_rol}`);
             if (!Array.isArray(respuesta)) {
-                console.error(
-                    "Respuesta recibida al consultar los módulos:",
-                    respuesta
-                );
-
-                throw new Error(
-                    "El servidor no devolvió una lista válida de módulos. Verifica el endpoint en FastAPI."
-                );
+                throw new Error("El servidor no devolvió una lista válida de módulos.");
             }
 
             const opciones = respuesta
                 .filter((modulo) => modulo.estado === true)
                 .map((modulo) => {
-                    const nombreModulo =
-                        modulo.nombre_modulo ??
-                        modulo.nombre ??
-                        modulo.modulo ??
-                        "";
-
-                    const nombreNormalizado =
-                        normalizarNombre(nombreModulo);
-
-                    const configuracion =
-                        rutasModulos[nombreNormalizado];
-
-                    if (!configuracion) {
-                        console.warn(
-                            "No hay una ruta configurada para el módulo:",
-                            nombreModulo
-                        );
-
-                        return null;
-                    }
-
-                    return configuracion;
+                    const nombreModulo = modulo.nombre_modulo ?? modulo.nombre ?? modulo.modulo ?? "";
+                    const configuracion = rutasModulos[normalizarNombre(nombreModulo)];
+                    if (!configuracion) console.warn("No hay una ruta configurada para el módulo:", nombreModulo);
+                    return configuracion ?? null;
                 })
-                .filter((item) => item !== null);
+                .filter(Boolean);
 
-            // Evitar enlaces repetidos.
-            menu = opciones.filter(
-                (item, indice, lista) =>
-                    lista.findIndex(
-                        (otro) => otro.ruta === item.ruta
-                    ) === indice
+            menu = opciones.filter((item, indice, lista) =>
+                lista.findIndex((otro) => otro.ruta === item.ruta) === indice
             );
-
         } catch (error) {
             console.error("Error cargando el menú:", error);
-
-            errorMenu =
-                error?.message ||
-                "No fue posible cargar las opciones del menú.";
+            errorMenu = error?.message || "No fue posible cargar las opciones del menú.";
         } finally {
             cargandoMenu = false;
         }
     }
 
-    onMount(() => {
-        cargarMenu();
-    });
+    onMount(cargarMenu);
 </script>
 
 <div class="d-flex min-vh-100">
@@ -188,12 +90,7 @@
     <aside
         class="bg-primary text-white p-3 d-flex flex-column sidebar"
     >
-        <a
-            href="/Inicio"
-            class="text-white text-decoration-none fs-5 fw-bold mb-4 pb-2 border-bottom border-light border-opacity-25"
-        >
-            🎓 Sistema de Becas
-        </a>
+        <Logo />
 
         {#if usuario}
             <div class="mb-3 px-2">
@@ -263,9 +160,31 @@
     }
 
     @media (max-width: 768px) {
+        :global(.d-flex.min-vh-100) {
+            flex-direction: column;
+        }
+
         .sidebar {
-            width: 220px;
-            min-width: 220px;
+            width: 100%;
+            min-width: 0;
+            height: auto;
+            min-height: auto;
+            position: relative;
+            top: auto;
+            overflow: visible;
+        }
+
+        main {
+            width: 100%;
+            min-width: 0;
+            padding: 1rem !important;
+        }
+
+        :global(.container),
+        :global(.container-fluid) {
+            max-width: 100%;
+            padding-right: 0.75rem;
+            padding-left: 0.75rem;
         }
     }
 </style>

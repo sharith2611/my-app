@@ -1,7 +1,8 @@
 
+
 <script>
-    import { apiFetch } from "$lib/api.js";
     import { goto } from "$app/navigation";
+    import { apiFetch } from "$lib/api.js";
 
     let usuario = $state("");
     let clave = $state("");
@@ -21,62 +22,62 @@
 
         if (!codigoIngresado || !clave) {
             mensaje = "Por favor, ingresa tu usuario y clave.";
-            tipoMensaje = "danger";
             return;
         }
 
         cargando = true;
 
         try {
-            const usuarios = await apiFetch("/usuarios/");
-
-            if (!Array.isArray(usuarios)) {
-                throw new Error(
-                    "El servidor no devolvió una lista válida de usuarios."
-                );
-            }
-
-            const usuarioEncontrado = usuarios.find((u) => {
-                return (
-                    String(u.codigo_usuario ?? "").trim().toUpperCase() ===
-                        codigoIngresado &&
-                    String(u.clave ?? "") === clave &&
-                    u.estado === true
-                );
+            // Enviar las credenciales al backend para autenticarlas con JWT.
+            const respuesta = await apiFetch("/auth/login", {
+                method: "POST",
+                body: JSON.stringify({
+                    codigo_usuario: codigoIngresado,
+                    clave: clave
+                })
             });
 
-            if (!usuarioEncontrado) {
-                mensaje = "Usuario o clave incorrectos, o usuario inactivo.";
-                tipoMensaje = "danger";
-                return;
+            // Comprobar que el backend haya devuelto los datos esperados.
+            if (!respuesta?.access_token || !respuesta?.usuario) {
+                throw new Error(
+                    "El servidor no devolvió los datos de autenticación esperados."
+                );
             }
 
+            const usuarioAutenticado = respuesta.usuario;
+
             if (
-                usuarioEncontrado.id_usuario == null ||
-                usuarioEncontrado.id_rol == null
+                usuarioAutenticado.id_usuario == null ||
+                usuarioAutenticado.id_rol == null
             ) {
                 throw new Error(
                     "Los datos del usuario están incompletos."
                 );
             }
 
+            // Guardar el token JWT.
             sessionStorage.setItem(
-    "usuario",
-    JSON.stringify({
-        id_usuario: usuarioEncontrado.id_usuario,
-        codigo_usuario: usuarioEncontrado.codigo_usuario,
-        nombre: usuarioEncontrado.nombre,
-        cedula: usuarioEncontrado.cedula ?? null,
-        id_rol: usuarioEncontrado.id_rol
-    })
-);
+                "access_token",
+                respuesta.access_token
+            );
 
-console.log(
-    "Cédula del usuario encontrado:",
-    usuarioEncontrado.cedula
-);
+            // Mantener los datos del usuario para la navegación y el menú.
+            sessionStorage.setItem(
+                "usuario",
+                JSON.stringify({
+                    id_usuario: usuarioAutenticado.id_usuario,
+                    codigo_usuario: usuarioAutenticado.codigo_usuario,
+                    nombre: usuarioAutenticado.nombre,
+                    cedula: usuarioAutenticado.cedula ?? null,
+                    id_rol: usuarioAutenticado.id_rol
+                })
+            );
 
-await goto("/Inicio");
+            // Limpiar la clave del formulario.
+            clave = "";
+
+            await goto("/Inicio");
+
         } catch (error) {
             console.error("Error al iniciar sesión:", error);
 
@@ -85,6 +86,7 @@ await goto("/Inicio");
                 "No fue posible conectar con el servidor. Inténtalo nuevamente.";
 
             tipoMensaje = "danger";
+
         } finally {
             cargando = false;
         }
@@ -311,7 +313,7 @@ await goto("/Inicio");
         width: 76px;
         height: 76px;
         border-radius: 50%;
-        color: #0d6efd;
+        color: var(--campus-blue);
         background: #ffffff;
         box-shadow: 0 4px 15px rgb(0 0 0 / 8%);
     }

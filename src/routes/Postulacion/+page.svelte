@@ -1,181 +1,4 @@
-<script>
-    import { onMount } from "svelte";
-    import { goto } from "$app/navigation";
-    import { apiFetch } from "$lib/api.js";
-    import Navbar from "../../lib/Navbar.svelte";
-    import Footer from "../../lib/Footer.svelte";
-
-    let usuario = $state(null);
-    let estudiante = $state(null);
-    let convocatorias = $state([]);
-
-    let idConvocatoria = $state("");
-    let fechaPostulacion = $state("");
-    let observaciones = $state("");
-
-    let validandoEstudiante = $state(true);
-    let cargandoConvocatorias = $state(false);
-    let guardando = $state(false);
-
-    let mensaje = $state("");
-    let tipoMensaje = $state("danger");
-
-    function obtenerFechaActual() {
-        const ahora = new Date();
-        const anio = ahora.getFullYear();
-        const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-        const dia = String(ahora.getDate()).padStart(2, "0");
-
-        return `${anio}-${mes}-${dia}`;
-    }
-
-    function mostrarMensaje(texto, tipo = "danger") {
-        mensaje = texto;
-        tipoMensaje = tipo;
-    }
-
-    function obtenerNombreConvocatoria(convocatoria) {
-        return (
-            convocatoria.nombre_convocatoria ??
-            convocatoria.nombre ??
-            convocatoria.descripcion ??
-            `Convocatoria ${convocatoria.id_convocatoria}`
-        );
-    }
-
-    onMount(async () => {
-        fechaPostulacion = obtenerFechaActual();
-
-        const usuarioGuardado = sessionStorage.getItem("usuario");
-
-        if (!usuarioGuardado) {
-            await goto("/Login");
-            return;
-        }
-
-        try {
-            usuario = JSON.parse(usuarioGuardado);
-
-            if (!usuario?.cedula) {
-                mostrarMensaje(
-                    "No se encontró la cédula del usuario. Cierra sesión e inicia sesión nuevamente."
-                );
-                return;
-            }
-
-            // Buscar el estudiante asociado a la cédula del usuario.
-            estudiante = await apiFetch(
-                `/estudiantes/documento/${encodeURIComponent(usuario.cedula)}`
-            );
-
-            if (!estudiante?.id_estudiante) {
-                estudiante = null;
-                mostrarMensaje(
-                    "Debes actualizar tus datos de estudiante antes de postularte.",
-                    "warning"
-                );
-                return;
-            }
-
-            // Consultar las convocatorias.
-            cargandoConvocatorias = true;
-
-            const respuesta = await apiFetch("/convocatorias/");
-
-            convocatorias = Array.isArray(respuesta) ? respuesta : [];
-
-            if (convocatorias.length === 0) {
-                mostrarMensaje(
-                    "No hay convocatorias disponibles para seleccionar.",
-                    "warning"
-                );
-            }
-        } catch (error) {
-            console.error("Error al validar los datos:", error);
-
-            estudiante = null;
-
-            mostrarMensaje(
-                "No fue posible validar tus datos o consultar las convocatorias. Intenta nuevamente."
-            );
-        } finally {
-            validandoEstudiante = false;
-            cargandoConvocatorias = false;
-        }
-    });
-
-    async function registrarPostulacion(event) {
-        event.preventDefault();
-        mensaje = "";
-
-        if (!estudiante?.id_estudiante) {
-            mostrarMensaje(
-                "Debes actualizar tus datos de estudiante antes de postularte."
-            );
-            return;
-        }
-
-        if (!idConvocatoria) {
-            mostrarMensaje("Debes seleccionar una convocatoria.");
-            return;
-        }
-
-        if (!fechaPostulacion) {
-            mostrarMensaje("No se pudo establecer la fecha de postulación.");
-            return;
-        }
-
-        const convocatoriaSeleccionada = convocatorias.find(
-            (convocatoria) =>
-                String(convocatoria.id_convocatoria) ===
-                String(idConvocatoria)
-        );
-
-        if (!convocatoriaSeleccionada) {
-            mostrarMensaje("La convocatoria seleccionada no es válida.");
-            return;
-        }
-
-        guardando = true;
-
-        try {
-            const nuevaPostulacion = {
-                id_estudiante: estudiante.id_estudiante,
-                id_convocatoria: Number(idConvocatoria),
-                fecha_postulacion: new Date().toISOString(),
-                observaciones: observaciones.trim() || null,
-                adjuntos: null
-            };
-
-            // El backend asigna estado y escala inicial.
-            await apiFetch("/postulaciones/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(nuevaPostulacion)
-            });
-
-            mostrarMensaje(
-                "La postulación se registró correctamente.",
-                "success"
-            );
-
-            idConvocatoria = "";
-            fechaPostulacion = obtenerFechaActual();
-            observaciones = "";
-        } catch (error) {
-            console.error("Error al registrar la postulación:", error);
-
-            mostrarMensaje(
-                error?.message ??
-                "No fue posible registrar la postulación. Intenta nuevamente."
-            );
-        } finally {
-            guardando = false;
-        }
-    }
-</script>
+<script src="./Postulacion.js"></script>
 
 <Navbar>
     <div class="container py-4">
@@ -389,6 +212,23 @@
                                 </div>
                             </form>
                         </div>
+                    </div>
+
+                    <div class="mt-4">
+                        {#if errorPostulaciones}
+                            <div class="alert alert-danger" role="alert">
+                                {errorPostulaciones}
+                            </div>
+                        {/if}
+
+                        <DataTable
+                            data={postulaciones}
+                            columns={columnasPostulaciones}
+                            title="Mi historial de postulaciones"
+                            loading={cargandoPostulaciones}
+                            emptyMessage="Aún no tienes postulaciones registradas."
+                            pageSize={10}
+                        />
                     </div>
 
                 {:else}

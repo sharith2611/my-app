@@ -1,41 +1,4 @@
-<script> 
-    import Navbar from "../../lib/Navbar.svelte";
-    import Footer from "../../lib/Footer.svelte";
-
-	let documentos = [
-		{
-			id: 1,
-			adjudicacion: 'ADJ-001',
-			nombre: 'Carta de aprobación',
-			tipo: 'Carta',
-			estado: 'Cargado'
-		},
-		{
-			id: 2,
-			adjudicacion: 'ADJ-002',
-			nombre: 'Resolución de adjudicación',
-			tipo: 'Resolución',
-			estado: 'Pendiente'
-		},
-		{
-			id: 3,
-			adjudicacion: 'ADJ-003',
-			nombre: 'Acta de adjudicación',
-			tipo: 'Acta',
-			estado: 'Cargado'
-		}
-	];
-
-	// svelte-ignore non_reactive_update
-	let adjudicacion = '';
-	// svelte-ignore non_reactive_update
-	let nombre = '';
-	// svelte-ignore non_reactive_update
-	let tipo = '';
-	// svelte-ignore non_reactive_update
-	let descripcion = '';
-	// svelte-ignore non_reactive_update
-	let estado = '';
+<script src="./Documento_adjudicacion.js">
 </script>
 
 
